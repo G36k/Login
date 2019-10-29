@@ -1,3 +1,14 @@
+
+/* Pozdrav,
+
+kroz kod ćete naći mjesta u sql upitima gdje su user, password, nazivi tablespace-a i tablica obrisani, 
+razlog je sigurnost jer je ovo stvarna klasa koju koristim na svojim sustavima i služi za logiranje korisnika. 
+Klasa se koristi za spajanje korisnika koji se nalaze na bazi za spajanje na aplikacije koje se nalaze na weblogic serverima koje koristi
+Oracle ADF */
+
+
+
+
 package view;
 
 import java.sql.Connection;
@@ -88,7 +99,7 @@ public class Login {
     public Connection getConnection() throws SQLException {
         String username = this.uname.toUpperCase();
         String password = this.upw.toUpperCase();
-        String thinConn = "jdbc:oracle:thin:@172.27.9.26:1521/logisp.zzp.osrh";
+        String thinConn = "";
         DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
         Connection conn = DriverManager.getConnection(thinConn, username, password);
         conn.setAutoCommit(false);
@@ -96,9 +107,9 @@ public class Login {
     }
     //master konekcija
     public static Connection masterConnection () throws SQLException {
-        String username = "MEV";
-        String password = "ME5";
-        String thinConn = "jdbc:oracle:thin:@172.27.9.26:1521/logisp.zzp.osrh";
+        String username = "";
+        String password = "";
+        String thinConn = "";
         DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
         Connection conn = DriverManager.getConnection(thinConn, username, password);
         conn.setAutoCommit(false);
@@ -146,7 +157,7 @@ public class Login {
        
         
         try{
-            String sql = "select account_status from dba_users where username='" +uname +"'";
+            String sql = "select account_status from /* */ where username='" +uname +"'";
             System.out.println(sql);
             conn = view.Login.masterConnection();
             stat = conn.prepareStatement(sql);
@@ -209,7 +220,7 @@ public class Login {
         Connection conn = null;
             
         try{
-            String sql = "select cin_naziv||' '||ime||' '||prezime, postrojba_jmboc, id_aplikacije from master.korisnici_aplikacije_view where id_aplikacije=8 and usera='" +uname +"'";
+            String sql = "select cin_naziv||' '||ime||' '||prezime, postrojba_jmboc, id_aplikacije from /*  */ where id_aplikacije=8 and usera='" +uname +"'";
            
             conn = view.Login.masterConnection();
             stat = conn.prepareStatement(sql);
@@ -261,10 +272,10 @@ public class Login {
         ArrayList<Role> popisRola = new ArrayList<Role>();
         
         try{
-            String query= "SELECT  UserRolePrivs.GRANTED_ROLE FROM   MASTER.KORISNICI_APLIKACIJE KorisniciAplikacijeEO, MASTER.USER_ROLE_VIEW UserRolePrivs, MASTER.KORISNICI Korisnici\n" + 
-            "WHERE KorisniciAplikacijeEO.USERA=Korisnici.USERA  \n" + 
-            " AND GRANTED_ROLE NOT IN ('CONNECT', 'RESOURCE')                              \n" + 
-            "and id_aplikacije=8 and KorisniciAplikacijeEO.usera= upper(?)";
+            String query= "SELECT  UserRolePrivs.GRANTED_ROLE FROM   /* */ 
+            "WHERE /* */
+            " AND GRANTED_ROLE NOT IN ('CONNECT', 'RESOURCE')                              
+            "and id_aplikacije=8 and /* */";
             
                       
             PreparedStatement ps = conn.prepareStatement(query);
