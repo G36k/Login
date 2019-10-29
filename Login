@@ -38,9 +38,8 @@ public class Login {
     boolean idAplikacije = false;
 
 
-    //verify user name and password , set session scope values
-    public Login() {
-    }
+   
+   
    
     public String login() {
         
