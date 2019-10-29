@@ -1,0 +1,367 @@
+package view;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+
+import javax.faces.application.FacesMessage;
+import javax.faces.context.FacesContext;
+import javax.servlet.http.HttpSession;
+
+import oracle.adf.view.rich.component.rich.RichPanelWindow;
+import oracle.adf.view.rich.component.rich.RichPopup;
+
+import view.common.MyADFUtil;
+
+
+
+public class Login {
+    public static String uname;
+    private String upw;
+    private RichPanelWindow popUp;
+    private RichPopup popup;
+    private RichPopup passwordExpiredPopup;
+    boolean idAplikacije = false;
+
+
+    //verify user name and password , set session scope values
+    public Login() {
+    }
+   
+    public String login() {
+        
+        
+        
+        if (null != this.uname && null != this.upw) {
+           
+            Connection conn = null;
+            
+            //postavljanje usera i passworda u session scope
+            FacesContext ctx = FacesContext.getCurrentInstance();
+            HttpSession session = (HttpSession) ctx.getExternalContext().getSession(true);
+            
+            
+            try {
+                conn = this.getConnection();
+                getUser();
+                
+                if(idAplikacije==true){
+                session.setAttribute("uName", this.uname.toUpperCase());
+                session.setAttribute("uPassword", this.upw.toUpperCase());
+                resetFields();
+               
+                return "Naslovna.jsf";} 
+                
+            else { 
+                    resetFields();
+                    MyADFUtil.showWarnMessage("Odbijen pristup aplikaciji");
+                
+                } 
+            } 
+            
+            catch (SQLException e) {
+                return wrongPassword();
+                }
+            
+            finally {
+                if (conn != null)
+                    try{
+                        conn.close();
+                    }
+                    catch (SQLException e){
+                        
+                    }
+            }
+            
+        } else {
+            FacesContext.getCurrentInstance().addMessage(null, new FacesMessage("Unesite korisničko ime i zaporku..!"));
+        }
+        
+        return null;
+
+    }
+    
+    //verifikacija usera
+    public Connection getConnection() throws SQLException {
+        String username = this.uname.toUpperCase();
+        String password = this.upw.toUpperCase();
+        String thinConn = "jdbc:oracle:thin:@172.27.9.26:1521/logisp.zzp.osrh";
+        DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
+        Connection conn = DriverManager.getConnection(thinConn, username, password);
+        conn.setAutoCommit(false);
+        return conn;
+    }
+    //master konekcija
+    public static Connection masterConnection () throws SQLException {
+        String username = "MEV";
+        String password = "ME5";
+        String thinConn = "jdbc:oracle:thin:@172.27.9.26:1521/logisp.zzp.osrh";
+        DriverManager.registerDriver(new oracle.jdbc.OracleDriver());
+        Connection conn = DriverManager.getConnection(thinConn, username, password);
+        conn.setAutoCommit(false);
+        return conn;  
+    }
+
+    //logout metoda
+    public String logoutAction(){
+        try {
+            FacesContext fctx = FacesContext.getCurrentInstance();  
+            HttpSession session = (HttpSession) fctx.getExternalContext().getSession(true);
+            if (session != null) {
+                System.out.println("uname: "+MyADFUtil.getFromSessionScope("uName").toString());
+                SessionManage.getSession(MyADFUtil.getFromSessionScope("uName").toString());
+                SessionManage.killSession();
+                              
+                session.invalidate();               
+               
+                resetFields();
+                        
+                
+            }
+        }
+        catch (Exception e) {
+            System.err.println("error in logout -- " + e);
+        }
+       
+        return "index.jspx";
+    }
+    
+    //probjera statusa korisničkog računa
+    public String checkAccount(){
+        if (this.uname==null){
+            MyADFUtil.showWarnMessage("Unesite korisničko ime!");
+        }
+        
+        else if (this.upw==null){
+            MyADFUtil.showWarnMessage("Unesite zaporku!");
+        }
+        else{
+        PreparedStatement stat =  null;
+        ResultSet rs = null;
+        Connection conn = null;
+        String account_status="OPEN";
+       
+        
+        try{
+            String sql = "select account_status from dba_users where username='" +uname +"'";
+            System.out.println(sql);
+            conn = view.Login.masterConnection();
+            stat = conn.prepareStatement(sql);
+            rs = stat.executeQuery();
+                while (rs.next()){
+                    rs.getString(1);
+                    String status = rs.getString(1);
+                    System.out.println(status);
+                    if (rs.getString(1).equalsIgnoreCase(account_status)){
+                         System.out.println("Racun je otvoren");
+                         return login();
+                    }
+                    else if (rs.getString(1).equalsIgnoreCase("expired")){
+                        System.out.println("Lozinka je istekla");
+                        System.out.println(uname);
+                        MyADFUtil.putInSessionScope("korisnik", uname);
+                        System.out.println(MyADFUtil.getFromSessionScope("korisnik").toString());
+                        ChangeExpiredPassword.callExpiredPasswordPopup();
+                    }
+                    else callPopup();                    
+                       
+                }
+                
+        }
+        catch(Exception e){
+            e.printStackTrace();
+        }     
+        finally{
+            if(rs != null){
+                try{
+                    stat.close();
+                    rs.close();
+                }
+                catch(SQLException e){
+                    
+                }
+                if (conn != null){
+                    try{
+                        System.out.println("Zatvaram konekciju!");
+                        stat.close();
+                        conn.close();
+                        
+                    }
+                    catch(SQLException e){
+                        
+                    }
+                }
+            }
+        }
+        }
+        return null;
+    }
+   
+   
+   //dohvaćanje korisnika, provjera dozvole pristupa, spremanje atributa za filtriranje u session scope
+    public String getUser(){
+        
+        PreparedStatement stat =  null;
+        ResultSet rs = null;             
+        Connection conn = null;
+            
+        try{
+            String sql = "select cin_naziv||' '||ime||' '||prezime, postrojba_jmboc, id_aplikacije from master.korisnici_aplikacije_view where id_aplikacije=8 and usera='" +uname +"'";
+           
+            conn = view.Login.masterConnection();
+            stat = conn.prepareStatement(sql);
+                      
+            rs = stat.executeQuery();
+                        
+            while (rs.next()){
+                rs.getString(1);
+                rs.getString(2);
+                rs.getString(3);
+                String user = rs.getString(1);
+                String jmboc = rs.getString(2);
+                String id = rs.getString(3);
+                MyADFUtil.putInSessionScope("logirani_korisnik", user);
+                MyADFUtil.putInSessionScope("psif", jmboc);
+                
+                for(int i=0;i<id.length();i++){ 
+                    
+                                        
+                    if(id.matches("8")){
+                        System.out.println("Dobar id aplikacije");
+                        
+                        idAplikacije=true;
+                        
+                        }
+                                      
+                    }
+              //  getRole(conn,uname);
+                             
+            }
+                                    
+            conn.close();
+        }
+        catch (Exception e){
+               e.printStackTrace();
+           }
+              
+        return null;
+    }
+   
+    
+    /*  METODA KOJA PROVJERAVA KOJE ROLE KORSINIK IMA I SPREMA IH U popisRola ARRAY */
+    
+    public ArrayList<Role> getRole(Connection conn, String uname) throws Exception{
+        
+            System.out.println("array");
+            System.out.println(uname);
+        
+        ArrayList<Role> popisRola = new ArrayList<Role>();
+        
+        try{
+            String query= "SELECT  UserRolePrivs.GRANTED_ROLE FROM   MASTER.KORISNICI_APLIKACIJE KorisniciAplikacijeEO, MASTER.USER_ROLE_VIEW UserRolePrivs, MASTER.KORISNICI Korisnici\n" + 
+            "WHERE KorisniciAplikacijeEO.USERA=Korisnici.USERA  \n" + 
+            " AND GRANTED_ROLE NOT IN ('CONNECT', 'RESOURCE')                              \n" + 
+            "and id_aplikacije=8 and KorisniciAplikacijeEO.usera= upper(?)";
+            
+                      
+            PreparedStatement ps = conn.prepareStatement(query);
+            ps.setString(1,uname);
+            ResultSet rs = ps.executeQuery();
+            while(rs.next()){
+                                   
+                String nazivRole=rs.getString(1);
+                Role role = new Role (nazivRole);
+                popisRola.add(role);
+                                
+                }
+            
+            for(int i=0;i<popisRola.size();i++){
+                System.out.println(popisRola.get(i).getNazivRole());
+                }
+            }
+        catch(Exception e)
+        { 
+            e.printStackTrace();
+            }
+        return popisRola;
+        
+        }
+
+    
+
+
+  
+    public class Role {
+        
+        private String nazivRole;
+        public Role (String nazivRole){
+            
+            this.nazivRole = nazivRole;
+            
+            }
+        
+        public String getNazivRole() {
+            return nazivRole;
+            }
+        public void setNazivRole(String nazivRole){
+            this.nazivRole=nazivRole;
+            }
+        
+        }
+
+    
+     
+    public String callPopup(){
+        RichPopup.PopupHints hints = new RichPopup.PopupHints();
+        popup.show(hints);
+        return null;
+    }
+    
+  
+    public String hidePopup(){
+        RichPopup.PopupHints hints = new RichPopup.PopupHints();
+        popup.hide();
+        return null;
+    }
+    
+    public void setUname(String uname) {
+        this.uname = uname.toUpperCase();
+    }
+
+    public String getUname() {
+        return uname;
+    }
+
+    public void setUpw(String upw) {
+        this.upw = upw;
+    }
+
+    public String getUpw() {
+        return upw;
+    }
+   
+    public void setPopup(RichPopup popup) {
+        this.popup = popup;
+    }
+
+    public RichPopup getPopup() {
+        return popup;
+    }
+    
+    public String wrongPassword(){
+        FacesContext ctx = FacesContext.getCurrentInstance();
+        this.setUpw("");
+        FacesMessage fm = new FacesMessage(FacesMessage.SEVERITY_ERROR, "Pogrešna zaporka!", "");
+        ctx.addMessage(null, fm);
+        return null;
+    }
+    public String resetFields(){
+           this.setUname("");
+           this.setUpw("");
+           return null;
+       }
+}
+
